@@ -13,3 +13,4 @@ services:
     restart: always
     environment:
       - PYTHONUNBUFFERED=1
+      # - TESSDATA_PREFIX=/backend/api/tessdata
