@@ -1,8 +1,8 @@
-from io import BytesIO
-from typing import List
+from fastapi.responses import StreamingResponse
 from fastapi import FastAPI, UploadFile, Form, HTTPException
 from fastapi.responses import StreamingResponse
-import fitz
+from .services.pdf_convert_service import img_convert_to_string
+from .services.pdf_convert_service import pdf_convert_to_text
 
 app = FastAPI()
 
@@ -10,21 +10,28 @@ app = FastAPI()
 async def home():
     return {"message": "Bem-vindo ao API OCR pdf to txt"}
 
-@app.post("/join_pdf")
-async def join_pdf(pdf_files: List[UploadFile], output_file_name:str = Form("out.pdf")):
-    new_pdf = fitz.open()
-    for pdf_file in pdf_files:
-        pdf_stream = await pdf_file.read()
-        try:
-            pdf = fitz.open(None, pdf_stream, "pdf")
-        except:
-            raise HTTPException(status_code=400, detail=f"O arquivo {pdf_file.filename} não é um PDF válido.")
-        new_pdf.insert_pdf(pdf)
-    
-    new_pdf_buffer = BytesIO(new_pdf.tobytes())
+@app.post("/img_to_string")
+async def img_to_string(img_file: UploadFile):
+    try:
+        text = img_convert_to_string(img_file)
 
-    headers = {
-        'Content-Disposition': f'attachment; filename={output_file_name}'
-    }
+        return {"text": text}
+    except Exception as e:
+        # Se ocorrer algum erro, retorne uma mensagem de erro adequada
+        return {"error": f"Ocorreu um erro ao processar a imagem: {str(e)}"}
 
-    return StreamingResponse(new_pdf_buffer, headers=headers, media_type="application/pdf")
+@app.post("/pdf_to_txt")
+async def pdf_to_txt(pdf_file: UploadFile):
+    try:
+        # Chama pdf_convert_to_text para processar o PDF e obter o texto de cada página e o nome do arquivo zip
+        zip_filename = await pdf_convert_to_text(pdf_file)
+
+        # Retorna o arquivo zip para download
+        return StreamingResponse(
+            open(zip_filename, "rb"),
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename={zip_filename}"}
+        )
+    except Exception as e:
+        # Se ocorrer algum erro, retorne uma mensagem de erro adequada
+        return {"error": f"Ocorreu um erro : {str(e)}"}

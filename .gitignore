@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+backend/api/__pycache__/
+backend/api/*.py[cod]
+backend/api/*$py.class
+
 # C extensions
 *.so
 
