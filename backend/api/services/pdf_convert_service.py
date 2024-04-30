@@ -1,62 +1,84 @@
-import pytesseract
-import numpy as np
-import cv2 
-# from google.colab.patches import cv2_imshow
+import pytesseract # Pytesseract
+import numpy as np # NumPy
+import cv2 # OpenCV
+import os # Módulo os
+import fitz  # PyMuPDF
+import zipfile  # Importa o módulo zipfile
 
+# Importa o módulo Image do pacote PIL
+from PIL import Image
 
-def pdf_convert_to_text(pdf_file):
-    # Converte o PDF em uma lista de imagens
-    pages = convert_from_path(pdf_file, 300)
-
-    # Inicializa uma   string para armazenar o texto extraído de todas as páginas
-    full_text = ""
-
-    # Loop pelas páginas e extrai o texto de cada uma
-    for page in pages:
+def img_convert_to_string(img_file):
+    text = ""
+    try:
+        # config_tesseract = '--tessdata-dir tessdata' # Caminho para o diretório de dados de treinamento do Tesseract
+        config_tesseract = f'--tessdata-dir {os.environ["TESSDATA_PREFIX"]}'
+        # Abre a imagem usando PIL
+        img = Image.open(img_file.file)
+        # Converte a imagem para um array numpy
+        img_array = np.array(img)
         # Converte a imagem para escala de cinza
-        gray = cv2.cvtColor(np.array(page), cv2.COLOR_RGB2GRAY)
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        # Usa pytesseract para extrair texto da imagem na limguagem portuguesa
+        text = pytesseract.image_to_string(gray, lang='por', config=config_tesseract)
         
-        # Usa pytesseract para extrair texto da imagem
-        text = pytesseract.image_to_string(gray)
-        
-        # Adiciona o texto extraído à string completa
-        full_text += text + "\n"
-
-    return full_text
+        return text
+    except Exception as e:
+        raise Exception(f"Erro ao converter: {str(e)}")
 
 
+async def pdf_convert_to_text(pdf_file):
+    # config_tesseract = '--tessdata-dir tessdata' # Caminho para o diretório de dados de treinamento do Tesseract
+    config_tesseract = f'--tessdata-dir {os.environ["TESSDATA_PREFIX"]}'
+    # Lê o arquivo PDF
+    pdf_stream = await pdf_file.read()
+    try:
+        # Abre o arquivo PDF
+        doc = fitz.open(None, pdf_stream, "pdf")
 
-# ///chat
+        # Inicializa a lista de textos
+        texts = []
+        # Itera sobre cada página do PDF
+        for i, page in enumerate(doc):
+            # Renderiza a página como uma imagem
+            pix = page.get_pixmap()
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
-# import pytesseract
-# from pdf2image import convert_from_path
-# import os
+            # Converte a imagem para um array numpy
+            img_array = np.array(img)
+            # Converte a imagem para escala de cinza
+            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+            # Usa pytesseract para extrair texto da imagem na limguagem portuguesa
+            text = pytesseract.image_to_string(gray, lang='por', config=config_tesseract)
 
-# def pdf_to_text(pdf_file_path, output_text_file):
-#     # Converte o PDF em uma lista de imagens
-#     pages = convert_from_path(pdf_file_path, 300)
+            # Adiciona o texto da página à lista de textos
+            texts.append([text])
 
-#     # Inicializa uma string para armazenar o texto extraído de todas as páginas
-#     full_text = ""
+            # Cria um diretório para salvar os arquivos de texto, se não existir
+            directory = "textos"
+            if not os.path.exists(directory):
+                os.makedirs(directory)
 
-#     # Loop pelas páginas e extrai o texto de cada uma
-#     for page in pages:
-#         # Converte a imagem para escala de cinza
-#         gray = cv2.cvtColor(np.array(page), cv2.COLOR_RGB2GRAY)
-        
-#         # Usa pytesseract para extrair texto da imagem
-#         text = pytesseract.image_to_string(gray)
-        
-#         # Adiciona o texto extraído à string completa
-#         full_text += text + "\n"
+            # Cria um arquivo .txt para a página atual
+            filename = os.path.join(directory, f"page_{i+1}.txt")  # Caminho completo do arquivo
+            with open(filename, "w") as f:
+                f.write(text)
 
-#     # Salva o texto extraído em um arquivo .txt
-#     with open(output_text_file, 'w') as f:
-#         f.write(full_text)
+        # Fecha o documento PDF
+        doc.close()
 
-#     print("Texto extraído e salvo com sucesso em", output_text_file)
+        # Cria um arquivo zip contendo todos os arquivos de texto
+        zip_filename = "textos.zip"
+        with zipfile.ZipFile(zip_filename, "w") as zipf:
+            for root, _, files in os.walk(directory):
+                for file in files:
+                    zipf.write(os.path.join(root, file), file)
 
-# # Exemplo de uso da função
-# pdf_file_path = "seu_arquivo.pdf"
-# output_text_file = "texto_extraido.txt"
-# pdf_to_text(pdf_file_path, output_text_file)
+        # Exclui os arquivos .txt após a criação do arquivo zip
+        for root, _, files in os.walk(directory):
+            for file in files:
+                os.remove(os.path.join(root, file))
+
+        return zip_filename
+    except Exception as e:
+        raise Exception(f"Erro ao converter: {str(e)}")
